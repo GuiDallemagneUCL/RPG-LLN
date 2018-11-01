@@ -1,0 +1,31 @@
+[level]
+tileset = tile_set.png
+width = 16
+height = 16
+map: *******************
+	 *ooooooooooooooooo*
+     *o...............o*
+	 *o...............o*
+	 *o...............o*
+	 *o..........o....o*
+	 *o...............o*
+	 *o...o....o......o*
+	 *o...............o*
+	 *o...............o*
+	 *o...............o*
+	 *o...............o*
+	 *o...............o*
+	 *ooooooooooooooooo*
+	 *******************
+
+[*]
+name = void
+tile = 0,0
+
+[.]
+name = grass
+tile = 0,1
+
+[o]
+name = wall
+tile = 0,5
