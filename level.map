@@ -1,5 +1,5 @@
 [level]
-tileset = tile_set.png
+tileset = images/tile_set.png
 width = 16
 height = 16
 map: *******************
