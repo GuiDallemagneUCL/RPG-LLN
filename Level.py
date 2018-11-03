@@ -30,7 +30,8 @@ class Level:
 		except KeyError:
 			return {}
 	
-	def render(self,screen,width,height):
+	def render(self,screen,size):
+		width = size[0]; height = size[1]
 		sc_width = screen.get_rect().width
 		sc_height = screen.get_rect().height
 
@@ -49,8 +50,6 @@ class Level:
 				image.blit(surf,(i*tile_width,j*tile_height))
 		return image
 
-
-
 	def load_tile_table(self,filename,width,height):
 		image = pygame.image.load(filename).convert()
 		image_width, image_height = image.get_size()
@@ -62,5 +61,4 @@ class Level:
 				rect = (tile_x*width, tile_y*height, width, height)
 				line.append(image.subsurface(rect))
 		return tile_table
-
 
