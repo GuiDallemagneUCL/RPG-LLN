@@ -30,7 +30,8 @@ class Level:
 		except KeyError:
 			return {}
 	
-	def render(self,screen,width,height):
+	def render(self,screen,size):
+		width = size[0]; height = size[1]
 		sc_width = screen.get_rect().width
 		sc_height = screen.get_rect().height
 
