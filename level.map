@@ -21,6 +21,7 @@ map: *******************
 [*]
 name = void
 tile = 0,0
+block= 1
 
 [.]
 name = grass
@@ -29,3 +30,4 @@ tile = 0,1
 [o]
 name = wall
 tile = 0,5
+block= 1

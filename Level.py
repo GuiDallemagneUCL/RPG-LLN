@@ -50,8 +50,6 @@ class Level:
 				image.blit(surf,(i*tile_width,j*tile_height))
 		return image
 
-
-
 	def load_tile_table(self,filename,width,height):
 		image = pygame.image.load(filename).convert()
 		image_width, image_height = image.get_size()
@@ -63,5 +61,4 @@ class Level:
 				rect = (tile_x*width, tile_y*height, width, height)
 				line.append(image.subsurface(rect))
 		return tile_table
-
 

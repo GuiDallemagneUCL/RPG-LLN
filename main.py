@@ -2,45 +2,39 @@ import pygame
 import pygame.locals
 import numpy
 from Level import Level
+from Grid import Grid
+from Person import Person, Player
 
-class Grid:
-	def __init__(self,levelmap,screen,grid_dim):
-		self.screen   = screen                                 # pygame display
-		self.size     = grid_dim                               # tuple, grid dimensions (horizontal tiles, vertical tiles)
-		self.tilesize = (screen.get_rect().width/grid_dim[0],  # tuple, size of tiles in pixel (horizontal, vertical)
-				         screen.get_rect().height/grid_dim[1]) 
-		self.setLevel(levelmap)                                # set levelmap (filename)
-
-	def setLevel(self,levelmap):
-		self.level = Level(levelmap)
-		self.background = self.level.render(self.screen,self.size)
- 
 def main():
 	pygame.init()
-	clock = pygame.time.Clock()
-	pygame.display.set_caption("minimal program")
-	screen = pygame.display.set_mode((480,320))
-	grid_width = 15
-	grid_height = 10
+	pygame.display.set_caption("RPG - Louvain-la-Neuve")
+	screen      = pygame.display.set_mode((960,640))
+	grid_width  = 30
+	grid_height = 20
+	clock       = pygame.time.Clock()
 
-	grid = Grid("level.map",screen,(grid_width,grid_height))
+	grid   = Grid("level.map",screen,(grid_width,grid_height),(0,0))
+	player = Player("res/trainer_running.png",(10,10),grid,1)
 
-
-	view_coord = tuple(numpy.subtract((0,0),grid.tilesize))
-	screen.blit(grid.background,view_coord)
+	screen.blit(grid.background,grid.view_coord)
+	player.blit(screen,1)
 	pygame.display.flip()
 
-	current_direction = [0,0,0,0]
+	current_direction     = [0,0,0,0]
+	old_current_direction = current_direction.copy()
+	grid_offset_x         = grid.view_coord[0] % (screen.get_rect().width/grid_width)
+	grid_offset_y         = grid.view_coord[1] % (screen.get_rect().height/grid_height)
 
 	running = True
 	while running:
-		screen.blit(grid.background,view_coord)
+		screen.blit(grid.background,grid.view_coord)
+		player.blit(screen,player.movement(old_current_direction))
 		pygame.display.flip()
 		clock.tick(60)
-		print(current_direction)
 
-		grid_offset_x = view_coord[0] % (screen.get_rect().width/grid_width)
-		grid_offset_y = view_coord[1] % (screen.get_rect().height/grid_height)
+		print(grid.view_coord)
+		grid_offset_x = grid.view_coord[0] % (screen.get_rect().width/grid_width)
+		grid_offset_y = grid.view_coord[1] % (screen.get_rect().height/grid_height)
 
 		for event in pygame.event.get():
 			if event.type == pygame.QUIT:
@@ -48,13 +42,12 @@ def main():
 			updateDirection(event,current_direction)
 
 		if grid_offset_y + grid_offset_x == 0:
-			view_coord = updateViewCoordinates(view_coord,current_direction,screen,grid_height,grid_width)
+			grid.view_coord = updateViewCoordinates(grid.view_coord,current_direction,player)
 			old_current_direction = current_direction.copy()
+			#player.updatePos()
 		else:
-			view_coord = updateViewCoordinates(view_coord,old_current_direction,screen,grid_height,grid_width)
+			grid.view_coord = updateViewCoordinates(grid.view_coord,old_current_direction,player)
 			
-
-
 def updateDirection(event,current_direction):
 	if event.type == pygame.locals.KEYDOWN:
 		if keyIsDirection(event.key):
@@ -82,7 +75,7 @@ def keyIsDirection(key):
 		return True
 	return False
 
-def updateViewCoordinates(view_coord,current_direction,screen,grid_height,grid_width):
+def updateViewCoordinates(view_coord,current_direction,player):
 	mindir = 1e6
 	curdir = 0
 	for i in range(0,len(current_direction)):
@@ -91,19 +84,14 @@ def updateViewCoordinates(view_coord,current_direction,screen,grid_height,grid_w
 			curdir = i+1
 
 	if curdir == 1:
-		#view_coord = (view_coord[0],view_coord[1] + screen.get_rect().height / grid_height)
-		view_coord = (view_coord[0],view_coord[1] + 2)
+		view_coord = (view_coord[0],view_coord[1] + player.speed)
 	elif curdir == 2:
-		view_coord = (view_coord[0],view_coord[1] - 2)
+		view_coord = (view_coord[0],view_coord[1] - player.speed)
 	elif curdir == 3:
-		view_coord = (view_coord[0] + 2, view_coord[1])
+		view_coord = (view_coord[0] + player.speed, view_coord[1])
 	elif curdir == 4:
-		view_coord = (view_coord[0] - 2, view_coord[1])
+		view_coord = (view_coord[0] - player.speed, view_coord[1])
 	return view_coord
-
-
-
-
 
 if __name__=="__main__":
     main()
