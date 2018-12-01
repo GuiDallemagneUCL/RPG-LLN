@@ -4,6 +4,7 @@ import numpy
 from Level import Level
 from Grid import Grid
 from Person import Person, Player
+import time
 import sys
 import asyncio
 
@@ -11,6 +12,7 @@ import asyncio
 if sys.version_info < (3, 7):
     raise RuntimeError('Python3.7+ needed to run.')
 
+# TODO perf bench compared to synchronously managed tasks
 
 grid_width = 30
 grid_height = 20
@@ -34,11 +36,61 @@ key_direction_mapping = {pygame.locals.K_UP: 0,
                          pygame.locals.K_DOWN: 1,
                          pygame.locals.K_LEFT: 2,
                          pygame.locals.K_RIGHT: 3}
-wait_delay = 1e-4 # Useless  to go < 1e-4
+# Useless  to go < 1e-4, this controls game tick speed
+# (roughly, not the same as fps)
+wait_delay = 1e-4
+
+monitoring_data = {'event/s': 0,
+                   'handled-event/s': 0,
+                   'click/s': 0,
+                   'frame/s': 0,
+                   'handle_mouse-call/s': 0,
+                   'handle_events-call/s': 0,
+                   'handle_grid-call/s': 0,
+                   'monitoring-call/s': 0,
+                   '_events': 0,
+                   '_handled-events': 0,
+                   '_clicks': 0,
+                   '_frames': 0,
+                   '_handle_mouse-calls': 0,
+                   '_handle_events-calls': 0,
+                   '_handle_grid-calls': 0,
+                   '_monitoring-calls': 0,
+                   }
+
+
+async def monitoring():
+    while running:
+        ellapsed = time.time()
+        await asyncio.sleep(1)
+        ellapsed = time.time() - ellapsed
+
+        monitoring_data['event/s'] = monitoring_data['_events']/ellapsed
+        monitoring_data['handled-event/s'] = monitoring_data['_handled-events']/ellapsed
+        monitoring_data['click/s'] = monitoring_data['_clicks']/ellapsed
+        monitoring_data['frame/s'] = monitoring_data['_frames']/ellapsed
+        monitoring_data['handle_mouse-call/s'] = monitoring_data['_handle_mouse-calls']/ellapsed
+        monitoring_data['handle_events-call/s'] = monitoring_data['_handle_events-calls']/ellapsed
+        monitoring_data['handle_grid-call/s'] = monitoring_data['_handle_grid-calls']/ellapsed
+        monitoring_data['monitoring-call/s'] = monitoring_data['_monitoring-calls']/ellapsed
+
+        print('\nMONITORING:')
+        for k, v in monitoring_data.items():
+            if not k.startswith('_'):
+                print('[] ' + k + ': ' + str(v))
+
+        monitoring_data['_events'] = \
+            monitoring_data['_handled-events'] = \
+            monitoring_data['_clicks'] = \
+            monitoring_data['_frames'] = \
+            monitoring_data['_handle_mouse-calls'] = \
+            monitoring_data['_handle_events-calls'] = \
+            monitoring_data['_handle_grid-calls'] = 0
+        monitoring_data['_monitoring-calls'] = 1
 
 
 async def handle_mouse():
-    global bouton, bouton_rect, sound_played, running
+    global bouton, bouton_rect, sound_played, running, monitoring_data
     while running:
         ## Si le focus est sur la fenêtre.
         if pygame.mouse.get_focused():
@@ -58,22 +110,23 @@ async def handle_mouse():
                     bouton = pygame.image.load("images/sound_icon.png")
                     pygame.mixer.music.play(-1, 0.0)
                     sound_played = True
+                monitoring_data['_clicks'] += 1
                 await asyncio.sleep(0.1)
+        monitoring_data['_handle_mouse-calls'] += 1
         await asyncio.sleep(wait_delay)
 
 
 async def handle_grid():
     global current_direction, old_current_direction, bouton, running, screen,\
-        player, clock, grid, grid_width, grid_height
+        player, clock, grid, grid_width, grid_height, monitoring_data
     while running:
         screen.blit(grid.background, grid.view_coord)
         player.blit(screen, player.movement(old_current_direction))
         bouton = pygame.transform.scale(bouton, (32, 32))
         screen.blit(bouton, (0, 0))
         pygame.display.flip()
-        #clock.tick(60)
 
-        print(grid.view_coord)
+        #print(grid.view_coord)
         grid_offset_x = grid.view_coord[0] % (
                     screen.get_rect().width / grid_width)
         grid_offset_y = grid.view_coord[1] % (
@@ -88,24 +141,32 @@ async def handle_grid():
             grid.view_coord = updateViewCoordinates(grid.view_coord,
                                                     old_current_direction,
                                                     player)
-            await asyncio.sleep(0.02)
+            monitoring_data['_frames'] += 1
+            await asyncio.sleep(0.02) # This controls fps (roughly)
+        monitoring_data['_handle_grid-calls'] += 1
         await asyncio.sleep(wait_delay)
 
 
 async def handle_events():
     global current_direction, old_current_direction, bouton, running, screen,\
-        player, clock, grid, grid_width, grid_height
+        player, clock, grid, grid_width, grid_height, monitoring_data
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+                monitoring_data['_handled-events'] += 1
             if event.type == pygame.locals.KEYDOWN \
                     and event.key in key_direction_mapping:
                 current_direction[key_direction_mapping[event.key]] = max(
                         current_direction) + 1
+                monitoring_data['_handled-events'] += 1
             elif event.type == pygame.locals.KEYUP \
                     and event.key in key_direction_mapping:
                 current_direction[key_direction_mapping[event.key]] = 0
+                monitoring_data['_handled-events'] += 1
+            monitoring_data['_events'] += 1
+
+        monitoring_data['_handle_events-calls'] += 1
         await asyncio.sleep(wait_delay)
 
 
@@ -130,7 +191,7 @@ async def main():
     pygame.mixer.music.play(-1, 0.0)
     running = True
 
-    await asyncio.gather(handle_events(), handle_mouse(), handle_grid())
+    await asyncio.gather(handle_events(), handle_mouse(), handle_grid(), monitoring())
 
 
 def updateDirection(event, current_direction):
