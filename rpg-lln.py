@@ -134,21 +134,24 @@ class LlnRpg:
             pos_y = self.player.screen_pos[1] - self.grid.view_coord[1]
 
             if grid_offset_y + grid_offset_x == 0:
-                self.update_view_coordinates(direction)
-                self.old_current_direction = self.current_direction.copy()
-                self.player.pos = tuple(numpy.divide(
-                    (pos_x, pos_y), self.grid.tilesize))
+                self.player.pos = int(pos_x / self.grid.tilesize[0]), \
+                    int(pos_y / self.grid.tilesize[1])
                 self.player.direction = direction
-                if direction == 0:
-                    self.player.posture = 'still'
-            else:
-                if self.player.running:
-                    self.player.posture = 'running'
-                else:
-                    self.player.posture = 'walking'
 
-                self.update_view_coordinates(get_direction(
-                    self.old_current_direction))
+                if direction != 0 and self.check_collision(direction):
+                    self.update_view_coordinates(direction)
+                else:
+                    self.player.posture = 'still'
+                self.old_current_direction = self.current_direction.copy()
+            else:
+                posture = 'running' if self.player.running else 'walking'
+
+                if self.check_collision():
+                    self.update_view_coordinates(get_direction(
+                        self.old_current_direction))
+                else:
+                    posture = 'still'
+                self.player.posture = posture
 
             self.screen.blit(self.grid.background, self.grid.view_coord)
             self.screen.blit(self.bouton, (0, 0))
@@ -232,6 +235,20 @@ class LlnRpg:
         elif direction == 4:
             self.grid.view_coord = (self.grid.view_coord[0] - speed,
                                     self.grid.view_coord[1])
+
+    def check_collision(self, direction=None):
+        if direction is None:
+            direction = get_direction(self.old_current_direction)
+        x, y = self.player.pos
+        if direction == 1:
+            y -= 1
+        if direction == 2:
+            y += 1
+        if direction == 3:
+            x -= 1
+        if direction == 4:
+            x += 1
+        return self.grid.level.map[y][x] not in ('o',)
 
 
 if __name__ == "__main__":
