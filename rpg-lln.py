@@ -114,50 +114,15 @@ class LlnRpg:
         print('Closed mouse handler')
 
     async def handle_graphics(self):
-        size = self.screen.get_size()
-        x = (size[0]/2 - self.grid.screen_pos[0]) // self.grid.tilesize[0]
-        y = (size[1]/2 - self.grid.screen_pos[1]) // self.grid.tilesize[1]
-        self.player.pos = int(x), int(y)
-        print(x, y)
-        x = x * self.grid.tilesize[0] + self.grid.screen_pos[0]
-        y = y * self.grid.tilesize[1] + self.grid.screen_pos[1]
-        self.player.screen_pos = int(x), int(y)
-        print(x, y)
-
-        self.player.posture = 'still'
-        self.player.direction = 1
+        self.init_player()
         while self.running:
-            direction = get_direction(self.current_direction)
-
-            grid_offset_x, grid_offset_y = self.grid.get_mod()
-            pos_x = self.player.screen_pos[0] - self.grid.view_coord[0]
-            pos_y = self.player.screen_pos[1] - self.grid.view_coord[1]
-
-            if grid_offset_y + grid_offset_x == 0:
-                self.player.pos = int(pos_x / self.grid.tilesize[0]), \
-                    int(pos_y / self.grid.tilesize[1])
-                self.player.direction = direction
-
-                if direction != 0 and self.check_collision(direction):
-                    self.update_view_coordinates(direction)
-                else:
-                    self.player.posture = 'still'
-                self.old_current_direction = self.current_direction.copy()
-            else:
-                posture = 'running' if self.player.running else 'walking'
-
-                if self.check_collision():
-                    self.update_view_coordinates(get_direction(
-                        self.old_current_direction))
-                else:
-                    posture = 'still'
-                self.player.posture = posture
+            player_coord = self.update_player()
 
             self.screen.blit(self.grid.background, self.grid.view_coord)
             self.screen.blit(self.bouton, (0, 0))
             self.screen.blit(
                 self.player.sprites[get_animated_sprite(
-                    self.player, self.grid, (pos_x, pos_y))],
+                    self.player, self.grid, player_coord)],
                 (int(self.player.screen_pos[0]),
                  int(self.player.screen_pos[1])))
 
@@ -206,6 +171,48 @@ class LlnRpg:
         await asyncio.gather(self.handle_events(), self.handle_mouse(),
                              self.handle_graphics(), self.monitoring())
         print('Exit main')
+
+    def init_player(self):
+        size = self.screen.get_size()
+        x = (size[0] / 2 - self.grid.screen_pos[0]) // self.grid.tilesize[0]
+        y = (size[1] / 2 - self.grid.screen_pos[1]) // self.grid.tilesize[1]
+        self.player.pos = int(x), int(y)
+
+        x = x * self.grid.tilesize[0] + self.grid.screen_pos[0]
+        y = y * self.grid.tilesize[1] + self.grid.screen_pos[1]
+        self.player.screen_pos = int(x), int(y)
+
+        self.player.posture = 'still'
+        self.player.direction = 1
+
+    def update_player(self):
+        direction = get_direction(self.current_direction)
+
+        grid_offset_x, grid_offset_y = self.grid.get_mod()
+        pos_x = self.player.screen_pos[0] - self.grid.view_coord[0]
+        pos_y = self.player.screen_pos[1] - self.grid.view_coord[1]
+
+        if grid_offset_y + grid_offset_x == 0:
+            self.player.pos = int(pos_x / self.grid.tilesize[0]), \
+                              int(pos_y / self.grid.tilesize[1])
+            self.player.direction = direction
+
+            if direction != 0 and self.check_collision(direction):
+                self.update_view_coordinates(direction)
+            else:
+                self.player.posture = 'still'
+            self.old_current_direction = self.current_direction.copy()
+        else:
+            posture = 'running' if self.player.running else 'walking'
+
+            if self.check_collision():
+                self.update_view_coordinates(get_direction(
+                    self.old_current_direction))
+            else:
+                posture = 'still'
+            self.player.posture = posture
+
+        return pos_x, pos_y
 
     def toggle_sound(self):
         if self.sound_played:
