@@ -2,7 +2,7 @@ import numpy
 import pygame
 import pygame.locals
 from grid import Grid
-from person import Player
+from entities import Entity, Player
 import time
 import sys
 import asyncio
@@ -31,11 +31,11 @@ def get_direction(direction):
 
 def get_animated_sprite(person, grid, coord):
     """
-    :param person: A Person object, supposed to be in grid.
+    :param person: A Entity object, supposed to be in grid.
     :param grid: A Grid object.
-    :param coord: The coordinates of the Person object the grid's (0, 0),
+    :param coord: The coordinates of the Entity object the grid's (0, 0),
         usually the top left corner.
-    :return: The sprite that should be displayed for the Person object,
+    :return: The sprite that should be displayed for the Entity object,
         given its posture and coordinates.
     """
     i = int(person.direction < 3)
@@ -112,15 +112,16 @@ class LlnRpg:
                          self.screen,
                          (self.grid_width, self.grid_height),
                          kwargs.get('map_pos', (32*4, 32*2)))
-        self.player = kwargs.get('player', Player(['res/trainer_walking.png',
-                                                   'res/trainer_running.png'],
-                                                  self.grid.tilesize, 1))
-
-        # Arrays storing keyboard inputs from arrow keys, to allow smooth
-        # movement of the player between each tile and avoid being in between
-        # two tiles unexpectedly
-        self.current_direction = [0, 0, 0, 0]
-        self.old_current_direction = self.current_direction.copy()
+        self.player = kwargs.get('player',
+                                 Player(self.screen,
+                                        self.grid,
+                                        ['res/trainer_walking.png',
+                                         'res/trainer_running.png'],
+                                        self.grid.tilesize,
+                                        1,
+                                        'still'))
+        # Array storing arrow key inputs
+        self.raw_direction = [0, 0, 0, 0]
 
         # init button and its hitbox variable, assigned in toggle_sound
         self.sound_button = self.sound_button_box = None
@@ -193,11 +194,19 @@ class LlnRpg:
         screen. This function calls all the update functions of the entities
         in the map, including the player, first, then draw.
         """
-        # Init entities
-        self.init_player()
         while self.running:
+            # Update player
+            player_coord = self.player.update(
+                get_direction(self.raw_direction), self.grid)
+
+            # Update coordinates of the view
+            self.grid.view_coord = (
+                self.player.screen_pos[0] - self.player.map_pos[0],
+                self.player.screen_pos[1] - self.player.map_pos[1]
+                )
+
             # Update entities
-            player_coord = self.update_player()
+            # (Nothing for now)
 
             # Draw map in the background
             self.screen.blit(self.grid.background, self.grid.view_coord)
@@ -232,15 +241,15 @@ class LlnRpg:
                         and event.key in self.key_direction_mapping:
                     # Update pressed key as being the last pressed key
                     # (in case several are pressed simultaneously)
-                    self.current_direction[self.key_direction_mapping[
-                        event.key]] = max(self.current_direction) + 1
+                    self.raw_direction[self.key_direction_mapping[
+                        event.key]] = max(self.raw_direction) + 1
                     self.monitoring_data['handled-events'] += 1
                 # Key unpressed event, arrow key unpressed
                 elif event.type == pygame.locals.KEYUP \
                         and event.key in self.key_direction_mapping:
                     # Key is unpressed, so it should be taken into account
                     # anymore in player direction computation
-                    self.current_direction[self.key_direction_mapping[
+                    self.raw_direction[self.key_direction_mapping[
                         event.key]] = 0
                     self.monitoring_data['handled-events'] += 1
                 self.monitoring_data['events'] += 1
@@ -280,72 +289,6 @@ class LlnRpg:
         asyncio.run(gather_tasks())
         print('Exit main')
 
-    def init_player(self):
-        """
-        Initiates the player object into the map.
-        """
-        # Put the player in the center of the screen, then computes to which
-        # coordinates it correspond in the map.
-        # The player position is adjusted so that it is precisely fitting in
-        # a tile, even if he is no longer precisely in the center of the screen
-        size = self.screen.get_size()
-        x = (size[0] / 2 - self.grid.screen_pos[0]) // self.grid.tilesize[0]
-        y = (size[1] / 2 - self.grid.screen_pos[1]) // self.grid.tilesize[1]
-        self.player.pos = int(x), int(y)
-        # Computes back the adjusted coordinates of the player onto the screen
-        x = x * self.grid.tilesize[0] + self.grid.screen_pos[0]
-        y = y * self.grid.tilesize[1] + self.grid.screen_pos[1]
-        self.player.screen_pos = int(x), int(y)
-        # Initiates posture and direction because needed
-        self.player.posture = 'still'
-        self.player.direction = 1
-
-    def update_player(self):
-        """
-        Updates the position, direction and posture of the player, given its
-        position in the map.
-        :return: The new coordinates of the player on the map, in screen pixels.
-        """
-        # Position indicated by keybard input
-        direction = get_direction(self.current_direction)
-        # Offset from the position fitting precisely into a tile
-        grid_offset_x, grid_offset_y = self.grid.get_mod()
-        # Position of the player on the map, in screen pixels
-        pos_x = self.player.screen_pos[0] - self.grid.view_coord[0]
-        pos_y = self.player.screen_pos[1] - self.grid.view_coord[1]
-
-        # If player is fitting onto a tile
-        if grid_offset_y + grid_offset_x == 0:
-            # Update its position to this tile
-            self.player.pos = int(pos_x / self.grid.tilesize[0]), \
-                              int(pos_y / self.grid.tilesize[1])
-            # Update its direction
-            self.player.direction = direction
-
-            # If he wants to move (direction !=0) and if he can move (no
-            # obstacles in front of him), update the view coordinates
-            if direction != 0 and self.check_collision(direction):
-                # Update its posture
-                if self.player.running:
-                    self.player.posture = 'running'
-                else:
-                    self.player.posture = 'walking'
-                # And move
-                self.update_view_coordinates(direction)
-            # Otherwise, avoid him to move
-            else:
-                self.player.posture = 'still'
-            # Remember the direction for future movements
-            self.old_current_direction = self.current_direction.copy()
-        # If player is between two tiles, ignore keyboard entries and
-        # continue straight forward to next tile
-        else:
-            self.update_view_coordinates(get_direction(
-                self.old_current_direction))
-
-        return self.player.screen_pos[0] - self.grid.view_coord[0], \
-            self.player.screen_pos[1] - self.grid.view_coord[1]
-
     def toggle_sound(self):
         """
         Toggles the sound playing and the appearance of the corresponding
@@ -365,48 +308,6 @@ class LlnRpg:
             self.sound_played = True
         if self.sound_button_box is None:
             self.sound_button_box = self.sound_button.get_rect()
-
-    def update_view_coordinates(self, direction):
-        """
-        Updates the view coordinates toward the opposite of given direction,
-        which means that the player will move toward this direction relative
-        to the grid.
-        """
-        speed = self.player.speed
-        if self.player.running:
-            speed *= 2
-        if direction == 1:
-            self.grid.view_coord = (self.grid.view_coord[0],
-                                    self.grid.view_coord[1] + speed)
-        elif direction == 2:
-            self.grid.view_coord = (self.grid.view_coord[0],
-                                    self.grid.view_coord[1] - speed)
-        elif direction == 3:
-            self.grid.view_coord = (self.grid.view_coord[0] + speed,
-                                    self.grid.view_coord[1])
-        elif direction == 4:
-            self.grid.view_coord = (self.grid.view_coord[0] - speed,
-                                    self.grid.view_coord[1])
-
-    def check_collision(self, direction=None):
-        """
-        Check for collisions in front of the player. If no direction is
-        specified, take the direction stored from last frame.
-
-        :return: True if player can move forward, False if faces a wall.
-        """
-        if direction is None:
-            direction = get_direction(self.old_current_direction)
-        x, y = self.player.pos
-        if direction == 1:
-            y -= 1
-        if direction == 2:
-            y += 1
-        if direction == 3:
-            x -= 1
-        if direction == 4:
-            x += 1
-        return self.grid.level.map[y][x] not in ('o',)
 
 
 if __name__ == "__main__":
