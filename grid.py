@@ -13,6 +13,7 @@ class Grid:
             int(screen.get_rect().height / grid_dim[1])
         self.level = Level(levelmap)
         self.background = self.level.render(self.screen, self.size)
+        self.entities = dict()
 
     def setLevel(self, levelmap):
         self.level = Level(levelmap)
@@ -22,3 +23,14 @@ class Grid:
         return self.view_coord[0] % self.tilesize[0], \
                self.view_coord[1] % self.tilesize[1]
 
+    def add_entity(self, entity):
+        for i in range(len(self.entities) + 1):
+            if i not in self.entities:
+                self.entities[i] = entity
+                return i
+
+    def remove_entity(self, entity):
+        for i in self.entities:
+            if entity is self.entities[i]:
+                del self.entities[i]
+                return i

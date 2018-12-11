@@ -2,7 +2,7 @@ import numpy
 import pygame
 import pygame.locals
 from grid import Grid
-from entities import Entity, Player
+from entities import Coin, Entity, Player
 import time
 import sys
 import asyncio
@@ -27,21 +27,6 @@ def get_direction(direction):
             mindir = direction[i]
             curdir = i + 1
     return curdir
-
-
-def get_animated_sprite(person, grid, coord):
-    """
-    :param person: A Entity object, supposed to be in grid.
-    :param grid: A Grid object.
-    :param coord: The coordinates of the Entity object the grid's (0, 0),
-        usually the top left corner.
-    :return: The sprite that should be displayed for the Entity object,
-        given its posture and coordinates.
-    """
-    i = int(person.direction < 3)
-    coord, tilesize = coord[i], grid.tilesize[i]
-    sprite = int(coord*person.sprites_speed/tilesize) % len(person.posture)
-    return person.posture[sprite]
 
 
 class LlnRpg:
@@ -83,6 +68,8 @@ class LlnRpg:
         'frames': 0.0,
         'handle_events-loops': 0.0,
         'monitoring-interval': 0.0,
+        'player-balance': 0.0,
+        'entity-number': 0.0,
         }
 
     def __init__(self, **kwargs):
@@ -112,14 +99,14 @@ class LlnRpg:
                          self.screen,
                          (self.grid_width, self.grid_height),
                          kwargs.get('map_pos', (32*4, 32*2)))
-        self.player = kwargs.get('player',
-                                 Player(self.screen,
-                                        self.grid,
-                                        ['res/trainer_walking.png',
-                                         'res/trainer_running.png'],
-                                        self.grid.tilesize,
-                                        1,
-                                        'still'))
+        self.player = kwargs.get('player', Player(self.screen, self.grid,
+                                                  'male'))
+        # Create coins
+        for p in [(8, 10), (9, 11), (10, 10), (8, 12), (10, 12)]:
+            coin = Coin(tuple(numpy.multiply(self.grid.tilesize, 0.75)), 10)
+            coin.load_sprites('res/coin.png', 1, 1)
+            coin.set_pos(self.grid, p)
+            self.grid.add_entity(coin)
         # Array storing arrow key inputs
         self.raw_direction = [0, 0, 0, 0]
 
@@ -142,10 +129,15 @@ class LlnRpg:
         This function may also be used to check program's status and sanity.
         """
         while self.running:
-
-            # Computing elapsed time during the asynchronous waiting time
             elapsed = time.time()
             await asyncio.sleep(1)
+
+            # Gather some data
+            self.monitoring_data['player-balance'] = self.player.balance
+            # all entities + player
+            self.monitoring_data['entity-number'] = len(self.grid.entities) + 1
+
+            # Computing elapsed time during the asynchronous waiting time
             elapsed = time.time() - elapsed
 
             # Printing the whole data dictionary
@@ -196,8 +188,7 @@ class LlnRpg:
         """
         while self.running:
             # Update player
-            player_coord = self.player.update(
-                get_direction(self.raw_direction), self.grid)
+            self.player.update(get_direction(self.raw_direction), self.grid)
 
             # Update coordinates of the view
             self.grid.view_coord = (
@@ -205,19 +196,24 @@ class LlnRpg:
                 self.player.screen_pos[1] - self.player.map_pos[1]
                 )
 
-            # Update entities
-            # (Nothing for now)
-
             # Draw map in the background
             self.screen.blit(self.grid.background, self.grid.view_coord)
+
+            # Draw player
+            self.player.blit(self.screen, self.grid.view_coord)
+
+            # Update and draw entities
+            # creating list avoids error if dict size changes, which happen
+            # when entities delete themselves
+            grid_entities = [entity for _, entity in self.grid.entities.items()]
+            for entity in grid_entities:
+                # print(entity)
+                entity.update(self.grid)
+                entity.blit(self.screen, self.grid.view_coord)
+
             # Draw sound button
             self.screen.blit(self.sound_button, (0, 0))
-            # Draw entities
-            self.screen.blit(
-                self.player.sprites[get_animated_sprite(
-                    self.player, self.grid, player_coord)],
-                (int(self.player.screen_pos[0]),
-                 int(self.player.screen_pos[1])))
+
             # Actually display what was drawn
             pygame.display.flip()
             self.monitoring_data['frames'] += 1
