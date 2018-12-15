@@ -112,9 +112,9 @@ class LlnRpg:
 
         # init button and its hitbox variable, assigned in toggle_sound
         self.sound_button = self.sound_button_box = None
+        self.running = True
 
         self.sound_played = not kwargs.get('play_sound', False)
-        self.running = False
         # Useless  to go < 1e-4, this controls game tick speed
         # (roughly, not the same as fps)
         # Think of it as "how fast will the game compute things"
@@ -247,6 +247,16 @@ class LlnRpg:
                     # anymore in player direction computation
                     self.raw_direction[self.key_direction_mapping[
                         event.key]] = 0
+                    self.monitoring_data['handled-events'] += 1
+                # Key pressed event, space bar pressed
+                elif event.type == pygame.locals.KEYDOWN \
+                        and event.key == pygame.locals.K_SPACE:
+                    self.player.jumping = True
+                    self.monitoring_data['handled-events'] += 1
+                # Key unpressed event, space bar unpressed
+                elif event.type == pygame.locals.KEYUP \
+                        and event.key == pygame.locals.K_SPACE:
+                    self.player.jumping = False
                     self.monitoring_data['handled-events'] += 1
                 self.monitoring_data['events'] += 1
             self.monitoring_data['handle_events-loops'] += 1

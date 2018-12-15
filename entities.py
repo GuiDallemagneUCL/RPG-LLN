@@ -129,6 +129,8 @@ class Movable(Entity):
     Movement has to be managed outside the class since it needs access to the
     screen and the map, but this class provides tools to make it easy.
 
+    This class is meant for subclassing.
+
     :direction: The direction of the entity, 1: UP, 2: DOWN, 3: LEFT, 4: RIGHT.
     :posture: The list of sprites surface for current posture and direction.
     :postures: A dictionary of nested iterable. Each entry should contain an
@@ -137,6 +139,7 @@ class Movable(Entity):
         specific sprite easy for every posture and direction, by getting
         person.postures[posture][direction][nth_sprite].
     :speed: The speed in pixel per frame of the entity.
+    :can_move: Flag telling if the entity can move or not.
     """
     def __init__(self, direction, posture, speed, sprite_size=(32, 32),
                  sprite_speed=1, current_sprite=0, pos=(0, 0), map_pos=(0, 0),
@@ -145,6 +148,7 @@ class Movable(Entity):
                         map_pos, sprites)
         self._direction = direction
         self._old_direction = direction
+        self._can_move = False
 
         self._posture = []
         # Setup of postures
@@ -161,16 +165,17 @@ class Movable(Entity):
                 [6, 7, 8, 7],
                 [9, 10, 11, 10],
                 ],
-            'running': [
-                [12, 13, 14, 13],
-                [15, 16, 17, 16],
-                [18, 19, 20, 19],
-                [21, 22, 23, 22]
-                ],
             }
         self.speed = speed
         # Initiates posture
         self.posture = self.def_posture = posture
+
+    @property
+    def can_move(self):
+        """
+        Can_move property getter. (No setter available)
+        """
+        return self._can_move
 
     @property
     def direction(self):
@@ -219,13 +224,13 @@ class Movable(Entity):
         Entity.set_pos(self, grid, position)
         self.posture = self.def_posture if posture is None else posture
 
-    def get_speed_modifier(self, *args, **kwargs):
+    def get_speed(self):
         """
-        :return: The relevant speed modifier for current situation.
+        :return: The relevant speed for current situation.
         """
-        return 1
+        return self.speed
 
-    def update_posture(self, *args, **kwargs):
+    def update_posture(self):
         """
         Updates the posture to the relevant one for current situation.
         """
@@ -240,46 +245,61 @@ class Movable(Entity):
         :param grid: The grid this entity belongs to.
         """
         # Offset from the position fitting precisely into a tile
-        grid_offset_x, grid_offset_y = grid.get_mod()
+        if self.direction > 2: # If sprite direction is horizontal
+            # Try to fit on horizontal coordinates
+            offset = self.map_pos[0] % grid.tilesize[0]
+        else:
+            offset = self.map_pos[1] % grid.tilesize[1]
+        # This allows to correct player's coordinates even if it ended up moving
+        # between tiles (which can happen when getting precisely on a tile
+        # while jumping, because direction will be updated but the player
+        # will finish its jump later)
 
         # If player is fitting onto a tile
-        if grid_offset_y + grid_offset_x == 0:
-            # Update its position to this tile
-            self.pos = int(self.map_pos[0] / grid.tilesize[0]), \
-                       int(self.map_pos[1] / grid.tilesize[1])
-            # Update its direction
+        if offset == 0:
+            # Update its position only in current moving direction, again to
+            # allow correction of bad coordinates.
+            # + 0.9 to avoid miscalculations due to inexact
+            if self.direction > 2:
+                self.pos = int(self.map_pos[0] / grid.tilesize[0]), self.pos[1]
+            else:
+                self.pos = self.pos[0], int(self.map_pos[1] / grid.tilesize[1])
+            # Update its direction and speed
+            # Speed is updated only when on a tile to avoid bugs.
+            # If player can't get precisely on a tile (i.e. when its speed
+            # value does not divides the tilesize value, speed % size !=0),
+            # it may go through several tiles or even never stop moving this
+            # direction
             self.direction = direction
+            self.speed = self.get_speed()
         # If entity is between two tiles, ignore keyboard entries and
         # continue straight forward to next tile, direction don't change
 
         # Move if needed
         x, y = self.pos
         s_x, s_y = self.map_pos
-        speed_mod = self.get_speed_modifier()
         can_move = True
         if self._direction == 1:
             y -= 1
-            s_y -= self.speed * speed_mod
+            s_y -= self.speed
         elif self._direction == 2:
             y += 1
-            s_y += self.speed * speed_mod
+            s_y += self.speed
         elif self._direction == 3:
             x -= 1
-            s_x -= self.speed * speed_mod
+            s_x -= self.speed
         elif self._direction == 4:
             x += 1
-            s_x += self.speed * speed_mod
+            s_x += self.speed
         else:  # _direction == 0 (or invalid case, but shouldn't happen)
             can_move = False
         can_move = can_move and grid.level.map[y][x] not in ('o',)
+        self._can_move = can_move
+        # Update posture, now that we now if we move
+        self.update_posture()
         if can_move: # If direction != 0 and no obstacle
-            # Update its posture to a moving one
-            self.update_posture()
             # And move (well, validate movement calculated few lines up)
             self.map_pos = s_x, s_y
-        else:
-            # Still posture by default
-            self.posture = 'still'
         # Eventually update current sprite
         i = int(self.direction < 3)
         coord, tilesize = self.map_pos[i], grid.tilesize[i]
@@ -289,15 +309,19 @@ class Movable(Entity):
 
 class Player(Movable, Storage):
     """
-    Same as a Entity object, except that a Player entity is the "reference"
+    Same as a Movable object, except that a Player entity is the "reference"
     for drawing, as it is the only fixed point of the map as drawn on the
     screen. It has thus one more attribute for that. Since the Player objects
     is the reference for all positions, it needs to be updated first on every
     frames.
 
+    It also has new attributes for its movement particularities, and two new
+    postures: running and jumping.
+
     :screen_pos: The position on the screen in pixel. This allows us to know
         the position of the map depending on the entity's position.
     :running: Flag telling if the player runs or not.
+    :jumping: Flag telling if the player is jumping or not.
     :balance: The amount of money owned by the player.
     """
 
@@ -338,28 +362,95 @@ class Player(Movable, Storage):
         self.screen_pos = int(x), int(y)
 
         # Player variables
-        self.running = True
+        self._running = self._will_run = self._jumping = self._will_jump = False
+        self._jump_counter = None
         self.balance = 0
+
+        # Running posture
+        self.postures['running'] = [[12 + 3*i + j for j in range(3)]
+                                    for i in range(4)]
+        # Jumping posture
+        self.postures['jumping'] = [[12 + 3*i] for i in range(4)]
+
+    @property
+    def running(self):
+        """
+        Running property getter
+        """
+        return self._running
+
+    @running.setter
+    def running(self, value):
+        """
+        Running property setter.
+        """
+        self._will_run = value
+
+    @property
+    def jumping(self):
+        """
+        Jumping property getter
+        """
+        return self._jumping
+
+    @jumping.setter
+    def jumping(self, value):
+        """
+        Jumping property setter.
+        """
+        # Changing only if changing to True
+        self._will_jump = value if value else self._will_jump
 
     def update(self, direction, grid):
         """
         In addition to Movable.update, this function checks if the player is
         on the same tile as a coin, and collects it if it is the case.
         """
+        # Before calling parent method, update player's specific movement
+        # variables
+        if self._jump_counter is not None:
+            # In mid air
+            if self._jump_counter < 6:
+                self._jump_counter += 1
+            # At jump end (on ground)
+            else:
+                self._jump_counter = None
+
+        # No jumping, we can update state safely
+        elif (self.map_pos[0] % grid.tilesize[0],  # Offset to grid tiles
+              self.map_pos[1] % grid.tilesize[1]) == (0, 0):
+            self._running = self._will_run
+            self._jumping = self._will_jump and self._jump_counter is None
+            self._will_jump = False
+            if self._jumping:
+                # Jump start
+                self._jump_counter = -6
+
+        # Calling parent's update function
         Movable.update(self, direction, grid)
+        # Then movement due to jump. To avoid camera wobbling too much,
+        # the player moves on the screen too, but only due to jump, not to
+        # standard motion.
+        if self._jump_counter is not None:
+            self.map_pos = self.map_pos[0], self.map_pos[1] + self._jump_counter
+            self.screen_pos = self.screen_pos[0], \
+                self.screen_pos[1] + self._jump_counter
         for _, entity in grid.entities.items():
             if entity.pos == self.pos and isinstance(entity, Coin):
                 entity.collect(self)
 
-    def get_speed_modifier(self):
-        return 1 + int(self.running)  # True -> 2, False -> 1
+    def get_speed(self):
+        return 2*(1 + int(self.running))  # Running: True -> 4, False -> 2
 
     def update_posture(self):
-        # Only called if could move, otherwise posture was set to still
-        if self.running:
+        if self.jumping:
+            self.posture = 'jumping'
+        elif self.running and self.can_move:
             self.posture = 'running'
-        else:
+        elif self.can_move:
             self.posture = 'walking'
+        else:
+            self.posture = 'still'
 
 
 class Coin(Entity):
@@ -372,7 +463,7 @@ class Coin(Entity):
         Entity.__init__(self, sprite_size, 1, 0)
         self.value = value
         self._jump_counter = None
-        self._frame_couter = 0
+        self._frame_counter = 0
         self.sprites_speed = 1
 
     def update(self, grid):
@@ -383,10 +474,10 @@ class Coin(Entity):
         :param grid: The grid this coin belongs to.
         """
         cnt = self._jump_counter
-        if self._frame_couter <= 0:
-            self._frame_couter = self.sprites_speed
+        if self._frame_counter <= 0:
+            self._frame_counter = self.sprites_speed
         else:
-            self._frame_couter -= 1
+            self._frame_counter -= 1
             return
         if cnt is not None:
             if cnt < 6:
