@@ -17,6 +17,7 @@ class Entity:
     :sprites: A list of Surface objects that will be used to draw the entity
         on the screen.
     """
+
     def __init__(self, sprite_size=(32, 32), sprite_speed=1, current_sprite=0,
                  pos=(0, 0), map_pos=(0, 0), sprites=None):
         self.pos = pos
@@ -62,7 +63,7 @@ class Entity:
         """
         x_ts, y_ts = grid.tilesize
         x, y = position
-        self.map_pos = int(x_ts*x), int(y_ts*y)
+        self.map_pos = int(x_ts * x), int(y_ts * y)
         self.pos = int(x), int(y)
 
     def blit(self, screen, view_coord):
@@ -141,6 +142,7 @@ class Movable(Entity):
     :speed: The speed in pixel per frame of the entity.
     :can_move: Flag telling if the entity can move or not.
     """
+
     def __init__(self, direction, posture, speed, sprite_size=(32, 32),
                  sprite_speed=1, current_sprite=0, pos=(0, 0), map_pos=(0, 0),
                  sprites=None):
@@ -236,27 +238,26 @@ class Movable(Entity):
         """
         pass
 
-    def update(self, direction, grid):
+    def update(self, direction, grid, full=True):
         """
         Updates the entity's direction position and sprite. This function
         uses current entity's and grid state to animate the entity while moving.
 
         :param direction: The direction the entity may point to.
         :param grid: The grid this entity belongs to.
+        :param full: True (by default) if the entity can update its
+            motion-related variables (speed, posture, direction, etc.) and
+            move, False if it should just move. Useful when the entity is
+            stuck in a position, or jumping.
         """
         # Offset from the position fitting precisely into a tile
-        if self.direction > 2: # If sprite direction is horizontal
-            # Try to fit on horizontal coordinates
+        if self.direction > 2:
             offset = self.map_pos[0] % grid.tilesize[0]
         else:
             offset = self.map_pos[1] % grid.tilesize[1]
-        # This allows to correct player's coordinates even if it ended up moving
-        # between tiles (which can happen when getting precisely on a tile
-        # while jumping, because direction will be updated but the player
-        # will finish its jump later)
 
-        # If player is fitting onto a tile
-        if offset == 0:
+        # If player is fitting onto a tile and full update True
+        if offset == 0 and full:
             # Update its position only in current moving direction, again to
             # allow correction of bad coordinates.
             # + 0.9 to avoid miscalculations due to inexact
@@ -296,8 +297,9 @@ class Movable(Entity):
         can_move = can_move and grid.level.map[y][x] not in ('o',)
         self._can_move = can_move
         # Update posture, now that we now if we move
-        self.update_posture()
-        if can_move: # If direction != 0 and no obstacle
+        if full:
+            self.update_posture()
+        if can_move:  # If direction != 0 and no obstacle
             # And move (well, validate movement calculated few lines up)
             self.map_pos = s_x, s_y
         # Eventually update current sprite
@@ -362,15 +364,12 @@ class Player(Movable, Storage):
         self.screen_pos = int(x), int(y)
 
         # Player variables
-        self._running = self._will_run = self._jumping = self._will_jump = False
-        self._jump_counter = None
+        self._running = self._will_run = False
         self.balance = 0
 
         # Running posture
-        self.postures['running'] = [[12 + 3*i + j for j in range(3)]
+        self.postures['running'] = [[12 + 3 * i + j for j in range(3)]
                                     for i in range(4)]
-        # Jumping posture
-        self.postures['jumping'] = [[12 + 3*i] for i in range(4)]
 
     @property
     def running(self):
@@ -386,66 +385,27 @@ class Player(Movable, Storage):
         """
         self._will_run = value
 
-    @property
-    def jumping(self):
-        """
-        Jumping property getter
-        """
-        return self._jumping
-
-    @jumping.setter
-    def jumping(self, value):
-        """
-        Jumping property setter.
-        """
-        # Changing only if changing to True
-        self._will_jump = value if value else self._will_jump
-
-    def update(self, direction, grid):
+    def update(self, direction, grid, full=True):
         """
         In addition to Movable.update, this function checks if the player is
         on the same tile as a coin, and collects it if it is the case.
         """
-        # Before calling parent method, update player's specific movement
-        # variables
-        if self._jump_counter is not None:
-            # In mid air
-            if self._jump_counter < 6:
-                self._jump_counter += 1
-            # At jump end (on ground)
-            else:
-                self._jump_counter = None
-
-        # No jumping, we can update state safely
-        elif (self.map_pos[0] % grid.tilesize[0],  # Offset to grid tiles
-              self.map_pos[1] % grid.tilesize[1]) == (0, 0):
+        # Update running status if on tile
+        if full and (self.map_pos[0] % grid.tilesize[0],
+           self.map_pos[1] % grid.tilesize[1]) == (0, 0):
             self._running = self._will_run
-            self._jumping = self._will_jump and self._jump_counter is None
-            self._will_jump = False
-            if self._jumping:
-                # Jump start
-                self._jump_counter = -6
-
         # Calling parent's update function
-        Movable.update(self, direction, grid)
-        # Then movement due to jump. To avoid camera wobbling too much,
-        # the player moves on the screen too, but only due to jump, not to
-        # standard motion.
-        if self._jump_counter is not None:
-            self.map_pos = self.map_pos[0], self.map_pos[1] + self._jump_counter
-            self.screen_pos = self.screen_pos[0], \
-                self.screen_pos[1] + self._jump_counter
+        Movable.update(self, direction, grid, full)
+        # looking for money on the same tile
         for _, entity in grid.entities.items():
             if entity.pos == self.pos and isinstance(entity, Coin):
                 entity.collect(self)
 
     def get_speed(self):
-        return 2*(1 + int(self.running))  # Running: True -> 4, False -> 2
+        return 2 * (1 + int(self.running))  # Running: True -> 4, False -> 2
 
     def update_posture(self):
-        if self.jumping:
-            self.posture = 'jumping'
-        elif self.running and self.can_move:
+        if self.running and self.can_move:
             self.posture = 'running'
         elif self.can_move:
             self.posture = 'walking'
@@ -459,6 +419,7 @@ class Coin(Entity):
 
     :value: The value of the coin, added to player's balance when collected.
     """
+
     def __init__(self, sprite_size, value):
         Entity.__init__(self, sprite_size, 1, 0)
         self.value = value

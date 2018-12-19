@@ -58,6 +58,8 @@ class LlnRpg:
         pygame.locals.K_DOWN: 1,
         pygame.locals.K_LEFT: 2,
         pygame.locals.K_RIGHT: 3,
+        pygame.locals.K_s: 1,
+        pygame.locals.K_d: 3,
         }
 
     monitoring_data = {
@@ -74,22 +76,32 @@ class LlnRpg:
 
     def __init__(self, **kwargs):
         """
-        All arguments are keyword-arguments. All have default values.
+        All arguments are keyword-arguments. All have default values (in
+        parenthesis), even if not specified.
 
-        :param grid_width: Grid width in tiles.
-        :param grid_height: Grid height in tiles.
-        :param screen_mode: Screen size.
-        :param map_file: .map file describing the map.
+        :param azerty: True if keyboard entry is azerty, False for qwerty
+            (True).
+        :param grid_width: Grid width in tiles (30).
+        :param grid_height: Grid height in tiles (20).
+        :param screen_mode: Screen size (960, 640).
+        :param map_file: .map file describing the map ('level.map').
         :param map_pos: coordinates of the top left corner of the map,
-            relative to the top left corner of the screen.
-        :param player: The Player object representing the player.
+            relative to the top left corner of the screen (128, 64).
         :param play_sound: True to start playing sound, False to start with
-            sound muted.
+            sound muted (False).
         :param base_delay: Minimal delay to wait between each asynchronous
             call of the same function. Useless to give < 1e-4. This should
             not be changed since it affects a lot the way the game behave and
-            its performances.
+            its performances (1e-3).
         """
+        self.azerty = kwargs.get('azerty', True)
+        if self.azerty:
+            self.key_direction_mapping[pygame.locals.K_z] = 0
+            self.key_direction_mapping[pygame.locals.K_q] = 2
+        else:
+            self.key_direction_mapping[pygame.locals.K_w] = 0
+            self.key_direction_mapping[pygame.locals.K_a] = 2
+
         self.grid_width = kwargs.get('grid_width', 30)
         self.grid_height = kwargs.get('grid_height', 20)
 
@@ -99,8 +111,7 @@ class LlnRpg:
                          self.screen,
                          (self.grid_width, self.grid_height),
                          kwargs.get('map_pos', (32*4, 32*2)))
-        self.player = kwargs.get('player', Player(self.screen, self.grid,
-                                                  'male'))
+        self.player = Player(self.screen, self.grid, 'male')
         # Create coins
         for p in [(8, 10), (9, 11), (10, 10), (8, 12), (10, 12)]:
             coin = Coin(tuple(numpy.multiply(self.grid.tilesize, 0.75)), 10)
@@ -112,7 +123,7 @@ class LlnRpg:
 
         # init button and its hitbox variable, assigned in toggle_sound
         self.sound_button = self.sound_button_box = None
-        self.running = True
+        self.running = False
 
         self.sound_played = not kwargs.get('play_sound', False)
         # Useless  to go < 1e-4, this controls game tick speed
@@ -228,10 +239,12 @@ class LlnRpg:
         while self.running:
             # Poll each event pushed to the event queue
             for event in pygame.event.get():
+
                 # Quit event
                 if event.type == pygame.QUIT:
                     self.running = False
                     self.monitoring_data['handled-events'] += 1
+
                 # Key pressed event, arrow key pressed
                 if event.type == pygame.locals.KEYDOWN \
                         and event.key in self.key_direction_mapping:
@@ -240,6 +253,7 @@ class LlnRpg:
                     self.raw_direction[self.key_direction_mapping[
                         event.key]] = max(self.raw_direction) + 1
                     self.monitoring_data['handled-events'] += 1
+
                 # Key unpressed event, arrow key unpressed
                 elif event.type == pygame.locals.KEYUP \
                         and event.key in self.key_direction_mapping:
@@ -248,16 +262,13 @@ class LlnRpg:
                     self.raw_direction[self.key_direction_mapping[
                         event.key]] = 0
                     self.monitoring_data['handled-events'] += 1
+
                 # Key pressed event, space bar pressed
                 elif event.type == pygame.locals.KEYDOWN \
                         and event.key == pygame.locals.K_SPACE:
-                    self.player.jumping = True
+                    self.player.running = not self.player.running
                     self.monitoring_data['handled-events'] += 1
-                # Key unpressed event, space bar unpressed
-                elif event.type == pygame.locals.KEYUP \
-                        and event.key == pygame.locals.K_SPACE:
-                    self.player.jumping = False
-                    self.monitoring_data['handled-events'] += 1
+
                 self.monitoring_data['events'] += 1
             self.monitoring_data['handle_events-loops'] += 1
             await asyncio.sleep(self.base_delay)
