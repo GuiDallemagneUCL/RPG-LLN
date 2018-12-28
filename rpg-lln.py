@@ -183,9 +183,7 @@ class LlnRpg:
                 self.toggle_sound()
                 self.monitoring_data['handled-clicks'] += 1
             # wait until mouse unpressed
-            # TODO solve bug happening when leaving focus but still pressed
-            while self.running and (pygame.mouse.get_focused()
-                                    and pygame.mouse.get_pressed()[0]):
+            while self.running and pygame.mouse.get_pressed()[0]:
                 await asyncio.sleep(self.base_delay)
             self.monitoring_data['clicks'] += 1
             await asyncio.sleep(self.base_delay)  # avoiding too fast spam click
